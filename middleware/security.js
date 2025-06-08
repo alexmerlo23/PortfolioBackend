@@ -6,39 +6,11 @@ const express = require('express');
 
 // CORS configuration
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      'http://localhost:3000',
-      'http://localhost:5173', // Vite dev server
-      'https://alexsportfoliowebsite.netlify.app',
-      'https://orange-coast-0ff57da0f.6.azurestaticapps.net', // Your actual frontend URL
-    ].filter(Boolean);
-    
-    // Check if origin matches any allowed origin (including regex patterns)
-    const isAllowed = allowedOrigins.some(allowedOrigin => {
-      if (allowedOrigin instanceof RegExp) {
-        return allowedOrigin.test(origin);
-      }
-      return allowedOrigin === origin;
-    });
-    
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      console.log('Allowed origins:', allowedOrigins);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
-};
+    origin: true, // Allow all origins
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  };
 
 // Rate limiting for contact form
 const contactLimiter = rateLimit({
