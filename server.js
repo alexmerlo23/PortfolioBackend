@@ -1,5 +1,6 @@
 // server.js
 const express = require('express');
+const cors = require('cors');
 const { initializeDatabase, closeDatabase } = require('./config/database');
 const { setupMiddleware } = require('./middleware/security');
 const contactRoutes = require('./routes/contact');
@@ -9,11 +10,37 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Setup middleware
+// Add CORS at the very beginning
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: false
+}));
+
+// Handle preflight requests explicitly
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.sendStatus(200);
+});
+
+// Setup other middleware
 setupMiddleware(app);
 
-// Routes - Mount contact routes at /api/contact
-app.use('/api/contact', contactRoutes);
+// Test endpoint to verify CORS
+app.get('/api/test', (req, res) => {
+  res.json({
+    message: 'CORS test successful!',
+    origin: req.get('Origin'),
+    timestamp: new Date().toISOString(),
+    headers: req.headers
+  });
+});
+
+// Routes - Mount contact routes at /api
+app.use('/api', contactRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -48,8 +75,8 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
+      console.log(`CORS test: http://localhost:${PORT}/api/test`);
       console.log(`Contact API: http://localhost:${PORT}/api/contact`);
-      console.log(`Test endpoint: http://localhost:${PORT}/api/contact/test`);
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {
