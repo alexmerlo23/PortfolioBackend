@@ -12,20 +12,20 @@ const {
 const router = express.Router();
 
 // POST /api/contact - Submit contact form
-router.post('/contact', 
+// Changed from '/contact' to '/' since we're already under '/api/contact'
+router.post('/', 
   contactLimiter,
   validateContactForm,
   asyncHandler(submitContactForm)
 );
 
 // GET /api/contact/messages - Get all contact messages (Admin endpoint)
-// Note: In production, add authentication middleware here
-router.get('/contact/messages', 
+router.get('/messages', 
   asyncHandler(getContactMessages)
 );
 
 // GET /api/contact/stats - Get contact form statistics
-router.get('/contact/stats',
+router.get('/stats',
   asyncHandler(getContactStats)
 );
 
@@ -33,7 +33,7 @@ router.get('/contact/stats',
 router.get('/test', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'API is working correctly',
+    message: 'Contact API is working correctly',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
