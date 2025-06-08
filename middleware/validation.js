@@ -55,9 +55,9 @@ const validateContactForm = (req, res, next) => {
       });
     }
     
-    if (message.length < 10) {
+    if (message.length < 2) {
       return res.status(400).json({
-        error: 'Message must be at least 10 characters long'
+        error: 'Message must be at least 2 characters long'
       });
     }
     
