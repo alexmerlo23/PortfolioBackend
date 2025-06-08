@@ -1,4 +1,3 @@
-
 // middleware/security.js
 const cors = require('cors');
 const helmet = require('helmet');
