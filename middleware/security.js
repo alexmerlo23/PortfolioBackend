@@ -14,18 +14,30 @@ const corsOptions = {
       process.env.FRONTEND_URL,
       'http://localhost:3000',
       'http://localhost:5173', // Vite dev server
-      'https://orange-coast-0ff57da0f.6.azurestaticapps.net/'
+      'https://alexsportfoliowebsite.netlify.app',
+      'https://orange-coast-0ff57da0f.6.azurestaticapps.net', // Your actual frontend URL
     ].filter(Boolean);
     
-    if (allowedOrigins.includes(origin)) {
+    // Check if origin matches any allowed origin (including regex patterns)
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin);
+      }
+      return allowedOrigin === origin;
+    });
+    
+    if (isAllowed) {
       callback(null, true);
     } else {
+      console.log('CORS blocked origin:', origin);
+      console.log('Allowed origins:', allowedOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 };
 
 // Rate limiting for contact form
@@ -51,6 +63,15 @@ const generalLimiter = rateLimit({
 });
 
 const setupMiddleware = (app) => {
+  // Trust proxy if behind reverse proxy (for rate limiting and CORS)
+  app.set('trust proxy', 1);
+
+  // CORS - Apply this FIRST before other middleware
+  app.use(cors(corsOptions));
+
+  // Handle preflight requests explicitly
+  app.options('*', cors(corsOptions));
+
   // Security headers
   app.use(helmet({
     contentSecurityPolicy: {
@@ -64,9 +85,6 @@ const setupMiddleware = (app) => {
     crossOriginEmbedderPolicy: false
   }));
 
-  // CORS
-  app.use(cors(corsOptions));
-
   // Body parsing
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -74,10 +92,8 @@ const setupMiddleware = (app) => {
   // General rate limiting
   app.use(generalLimiter);
 
-  // Trust proxy if behind reverse proxy (for rate limiting)
-  app.set('trust proxy', 1);
-
   console.log('Security middleware configured');
+  console.log('CORS origins:', corsOptions.origin);
 };
 
 module.exports = {
