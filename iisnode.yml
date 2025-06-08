@@ -1,0 +1,5 @@
+# iisnode.yml
+loggingEnabled: true
+logDirectory: iisnode
+debuggingEnabled: false
+node_env: production
