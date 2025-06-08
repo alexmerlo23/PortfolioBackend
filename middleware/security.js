@@ -14,7 +14,7 @@ const corsOptions = {
       process.env.FRONTEND_URL,
       'http://localhost:3000',
       'http://localhost:5173', // Vite dev server
-      'https://alexsportfoliowebsite.netlify.app'
+      'https://orange-coast-0ff57da0f.6.azurestaticapps.net/'
     ].filter(Boolean);
     
     if (allowedOrigins.includes(origin)) {
