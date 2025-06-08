@@ -12,8 +12,8 @@ const PORT = process.env.PORT || 3001;
 // Setup middleware
 setupMiddleware(app);
 
-// Routes
-app.use('/api', contactRoutes);
+// Routes - Mount contact routes at /api/contact
+app.use('/api/contact', contactRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -48,6 +48,8 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
+      console.log(`Contact API: http://localhost:${PORT}/api/contact`);
+      console.log(`Test endpoint: http://localhost:${PORT}/api/contact/test`);
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {

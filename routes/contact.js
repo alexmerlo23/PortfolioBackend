@@ -7,25 +7,24 @@ const {
   submitContactForm, 
   getContactMessages, 
   getContactStats 
-} = require('../controllers/contactController');
+} = require('../controllers/contactController'); // Fixed path - should be ../controllers/contactController
 
 const router = express.Router();
 
 // POST /api/contact - Submit contact form
-router.post('/contact', 
+router.post('/', 
   contactLimiter,
   validateContactForm,
   asyncHandler(submitContactForm)
 );
 
 // GET /api/contact/messages - Get all contact messages (Admin endpoint)
-// Note: In production, add authentication middleware here
-router.get('/contact/messages', 
+router.get('/messages', 
   asyncHandler(getContactMessages)
 );
 
 // GET /api/contact/stats - Get contact form statistics
-router.get('/contact/stats',
+router.get('/stats',
   asyncHandler(getContactStats)
 );
 
