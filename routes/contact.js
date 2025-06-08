@@ -7,7 +7,7 @@ const {
   submitContactForm, 
   getContactMessages, 
   getContactStats 
-} = require('../controllers/contactController');
+} = require('../controllers/contactControllers');
 
 const router = express.Router();
 
