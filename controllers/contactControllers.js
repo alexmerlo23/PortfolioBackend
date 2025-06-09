@@ -24,32 +24,37 @@ const submitContactForm = async (req, res) => {
   });
   
   try {
-    // EmailJS configuration from environment variables (without REACT_APP_ prefix for backend)
+    // EmailJS configuration - using private key for server-side
     const serviceId = process.env.EMAILJS_SERVICE_ID;
     const templateId = process.env.EMAILJS_TEMPLATE_ID;
     const publicKey = process.env.EMAILJS_PUBLIC_KEY;
+    const privateKey = process.env.EMAILJS_PRIVATE_KEY; // Add this to your environment variables
     
     // Enhanced logging for EmailJS configuration
     log('INFO', 'EmailJS Configuration Check', {
       hasServiceId: !!serviceId,
       hasTemplateId: !!templateId,
       hasPublicKey: !!publicKey,
+      hasPrivateKey: !!privateKey,
       serviceIdPrefix: serviceId ? serviceId.substring(0, 8) + '...' : 'missing',
       templateIdPrefix: templateId ? templateId.substring(0, 8) + '...' : 'missing',
-      publicKeyPrefix: publicKey ? publicKey.substring(0, 8) + '...' : 'missing'
+      publicKeyPrefix: publicKey ? publicKey.substring(0, 8) + '...' : 'missing',
+      privateKeyPrefix: privateKey ? privateKey.substring(0, 8) + '...' : 'missing'
     });
     
-    // Check if all EmailJS config is present
-    const hasEmailConfig = !!(serviceId && templateId && publicKey);
+    // Check if all EmailJS config is present (need private key for server-side)
+    const hasEmailConfig = !!(serviceId && templateId && privateKey);
     log('INFO', 'EmailJS Configuration Status', { 
       fullyConfigured: hasEmailConfig,
       serviceId: serviceId ? 'present' : 'missing',
       templateId: templateId ? 'present' : 'missing', 
-      publicKey: publicKey ? 'present' : 'missing'
+      publicKey: publicKey ? 'present' : 'missing',
+      privateKey: privateKey ? 'present' : 'missing',
+      note: 'Server-side EmailJS requires private key, not public key'
     });
     
     if (!hasEmailConfig) {
-      log('WARN', 'EmailJS not fully configured - emails will not be sent');
+      log('WARN', 'EmailJS not fully configured for server-side - emails will not be sent');
     }
     
     const pool = await getDatabase();
@@ -88,18 +93,21 @@ const submitContactForm = async (req, res) => {
       // EmailJS sending (only if config is available)
       hasEmailConfig 
         ? (async () => {
-            log('INFO', 'Attempting to send email via EmailJS', {
+            log('INFO', 'Attempting to send email via EmailJS (server-side)', {
               serviceId: serviceId,
-              templateId: templateId
+              templateId: templateId,
+              usingPrivateKey: true
             });
             
             try {
+              // For server-side, use private key in options
               const emailResponse = await emailjs.send(
                 serviceId, 
                 templateId, 
                 emailTemplateParams,
                 {
-                  publicKey: publicKey
+                  publicKey: publicKey,
+                  privateKey: privateKey // This is key for server-side
                 }
               );
               
@@ -113,14 +121,15 @@ const submitContactForm = async (req, res) => {
               log('ERROR', 'EmailJS send failed', {
                 error: emailError.message,
                 status: emailError.status,
-                text: emailError.text
+                text: emailError.text,
+                fullError: emailError
               });
               throw emailError;
             }
           })()
         : Promise.resolve({ 
             status: 'skipped', 
-            reason: 'EmailJS configuration incomplete'
+            reason: 'EmailJS configuration incomplete (missing private key for server-side)'
           })
     ]);
     
@@ -182,11 +191,14 @@ const submitContactForm = async (req, res) => {
           environmentVariables: {
             serviceId: serviceId ? `${serviceId.substring(0,8)}...` : 'missing',
             templateId: templateId ? `${templateId.substring(0,8)}...` : 'missing',
-            publicKey: publicKey ? `${publicKey.substring(0,8)}...` : 'missing',
+            publicKey: publicKey ? `${publicKey.substring(0,8)}...` : 'missing',  
+            privateKey: privateKey ? `${privateKey.substring(0,8)}...` : 'missing',
             hasServiceId: !!serviceId,
             hasTemplateId: !!templateId,
             hasPublicKey: !!publicKey,
-            emailConfigured: hasEmailConfig
+            hasPrivateKey: !!privateKey,
+            emailConfigured: hasEmailConfig,
+            serverSideNote: 'Server-side EmailJS requires private key'
           },
           emailResult: emailResult.status === 'fulfilled' ? {
             status: emailResult.value.status,
@@ -195,6 +207,8 @@ const submitContactForm = async (req, res) => {
           } : {
             rejected: true,
             error: emailResult.reason?.message || 'Unknown error',
+            status: emailResult.reason?.status,
+            text: emailResult.reason?.text,
             fullError: emailResult.reason
           }
         }
