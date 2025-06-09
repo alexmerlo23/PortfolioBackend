@@ -1,49 +1,100 @@
 // controllers/contactController.js
 const { getDatabase, sql } = require('../config/database');
+const emailjs = require('@emailjs/nodejs');
 
 const submitContactForm = async (req, res) => {
   const { name, email, message } = req.body;
   
   try {
+    // EmailJS configuration from environment variables
+    const serviceId = process.env.serviceId;
+    const templateId = process.env.templateId;
+    const publicKey = process.env.publicKey;
+    
+    // Log EmailJS configuration (without exposing sensitive data)
+    console.log('EmailJS Config:', {
+      hasServiceId: !!serviceId,
+      hasTemplateId: !!templateId,
+      hasPublicKey: !!publicKey
+    });
+    
     const pool = await getDatabase();
     const request = pool.request();
     
-    // Insert contact message into database
-    const result = await request
-      .input('name', sql.NVarChar(100), name)
-      .input('email', sql.NVarChar(255), email)
-      .input('message', sql.NVarChar(sql.MAX), message)
-      .query(`
-        INSERT INTO ContactMessages (Name, Email, Message) 
-        OUTPUT INSERTED.ID, INSERTED.CreatedAt
-        VALUES (@name, @email, @message)
-      `);
+    // Execute database insert and EmailJS simultaneously
+    const [dbResult, emailResult] = await Promise.allSettled([
+      // Database insertion
+      request
+        .input('name', sql.NVarChar(100), name)
+        .input('email', sql.NVarChar(255), email)
+        .input('message', sql.NVarChar(sql.MAX), message)
+        .query(`
+          INSERT INTO ContactMessages (Name, Email, Message) 
+          OUTPUT INSERTED.ID, INSERTED.CreatedAt
+          VALUES (@name, @email, @message)
+        `),
+      
+      // EmailJS sending (only if config is available)
+      serviceId && templateId && publicKey 
+        ? emailjs.send(serviceId, templateId, {
+            user_name: name,
+            user_email: email,
+            message: message,
+            to_email: 'alexmerlo23@gmail.com' // Your email
+          }, {
+            publicKey: publicKey
+          })
+        : Promise.resolve({ status: 'skipped', reason: 'EmailJS config missing' })
+    ]);
     
-    const insertedRecord = result.recordset[0];
+    // Check results
+    const dbSuccess = dbResult.status === 'fulfilled';
+    const emailSuccess = emailResult.status === 'fulfilled';
     
-    // Log successful submission (with privacy protection)
-    console.log('Contact message saved:', {
-      id: insertedRecord.ID,
-      name: name.substring(0, 3) + '***',
-      email: email.substring(0, 3) + '***',
-      messageLength: message.length,
-      timestamp: insertedRecord.CreatedAt,
-      ip: req.ip
-    });
+    let insertedRecord = null;
     
-    res.status(201).json({
-      success: true,
-      message: 'Contact message sent successfully',
-      id: insertedRecord.ID,
-      timestamp: insertedRecord.CreatedAt
-    });
+    if (dbSuccess) {
+      insertedRecord = dbResult.value.recordset[0];
+      
+      // Log successful database submission
+      console.log('Contact message saved:', {
+        id: insertedRecord.ID,
+        name: name.substring(0, 3) + '***',
+        email: email.substring(0, 3) + '***',
+        messageLength: message.length,
+        timestamp: insertedRecord.CreatedAt,
+        ip: req.ip
+      });
+    } else {
+      console.error('Database error:', dbResult.reason);
+    }
+    
+    if (emailSuccess) {
+      console.log('Email sent successfully via EmailJS');
+    } else {
+      console.error('EmailJS error:', emailResult.reason);
+    }
+    
+    // Determine response based on results
+    if (dbSuccess) {
+      res.status(201).json({
+        success: true,
+        message: 'Contact message sent successfully',
+        id: insertedRecord.ID,
+        timestamp: insertedRecord.CreatedAt,
+        emailSent: emailSuccess
+      });
+    } else {
+      // Database failed
+      throw dbResult.reason;
+    }
     
   } catch (error) {
-    console.error('Database error in contact submission:', {
+    console.error('Error in contact submission:', {
       error: error.message,
       code: error.code,
       name: error.name,
-      email: email.substring(0, 3) + '***',
+      email: email ? email.substring(0, 3) + '***' : 'unknown',
       ip: req.ip
     });
     
@@ -60,7 +111,7 @@ const submitContactForm = async (req, res) => {
       });
     }
     
-    // Generic database error
+    // Generic error
     res.status(500).json({
       error: 'Failed to save contact message. Please try again later.'
     });
