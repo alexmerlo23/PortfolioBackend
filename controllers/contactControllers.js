@@ -5,6 +5,24 @@ const emailjs = require('@emailjs/nodejs');
 const submitContactForm = async (req, res) => {
   const { name, email, message } = req.body;
   
+  // Azure-compatible logging with timestamps
+  const log = (level, message, data = {}) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      level,
+      message,
+      ...data
+    };
+    console.log(`[${timestamp}] [${level}] ${message}`, data);
+  };
+  
+  log('INFO', '🚀 Contact form submission started', { 
+    hasName: !!name, 
+    hasEmail: !!email, 
+    messageLength: message?.length || 0 
+  });
+  
   try {
     // EmailJS configuration from environment variables (without REACT_APP_ prefix for backend)
     const serviceId = process.env.EMAILJS_SERVICE_ID;
@@ -12,22 +30,26 @@ const submitContactForm = async (req, res) => {
     const publicKey = process.env.EMAILJS_PUBLIC_KEY;
     
     // Enhanced logging for EmailJS configuration
-    console.log('=== EmailJS Configuration Check ===');
-    console.log('Service ID exists:', !!serviceId, serviceId ? `(${serviceId.substring(0, 8)}...)` : '(missing)');
-    console.log('Template ID exists:', !!templateId, templateId ? `(${templateId.substring(0, 8)}...)` : '(missing)');
-    console.log('Public Key exists:', !!publicKey, publicKey ? `(${publicKey.substring(0, 8)}...)` : '(missing)');
+    log('INFO', 'EmailJS Configuration Check', {
+      hasServiceId: !!serviceId,
+      hasTemplateId: !!templateId,
+      hasPublicKey: !!publicKey,
+      serviceIdPrefix: serviceId ? serviceId.substring(0, 8) + '...' : 'missing',
+      templateIdPrefix: templateId ? templateId.substring(0, 8) + '...' : 'missing',
+      publicKeyPrefix: publicKey ? publicKey.substring(0, 8) + '...' : 'missing'
+    });
     
     // Check if all EmailJS config is present
-    const hasEmailConfig = serviceId && templateId && publicKey;
-    console.log('EmailJS fully configured:', hasEmailConfig);
+    const hasEmailConfig = !!(serviceId && templateId && publicKey);
+    log('INFO', 'EmailJS Configuration Status', { 
+      fullyConfigured: hasEmailConfig,
+      serviceId: serviceId ? 'present' : 'missing',
+      templateId: templateId ? 'present' : 'missing', 
+      publicKey: publicKey ? 'present' : 'missing'
+    });
     
     if (!hasEmailConfig) {
-      console.warn('⚠️  EmailJS not fully configured - emails will not be sent');
-      console.log('Missing:', {
-        serviceId: !serviceId,
-        templateId: !templateId,
-        publicKey: !publicKey
-      });
+      log('WARN', 'EmailJS not fully configured - emails will not be sent');
     }
     
     const pool = await getDatabase();
@@ -43,8 +65,7 @@ const submitContactForm = async (req, res) => {
       subject: `New Contact Form Message from ${name}`
     };
     
-    console.log('=== Email Template Parameters ===');
-    console.log('Template params:', {
+    log('INFO', 'Email Template Parameters Prepared', {
       user_name: name,
       user_email: email,
       message_length: message.length,
@@ -67,34 +88,39 @@ const submitContactForm = async (req, res) => {
       // EmailJS sending (only if config is available)
       hasEmailConfig 
         ? (async () => {
-            console.log('=== Attempting to send email via EmailJS ===');
-            console.log('Using service:', serviceId);
-            console.log('Using template:', templateId);
-            
-            const emailResponse = await emailjs.send(
-              serviceId, 
-              templateId, 
-              emailTemplateParams,
-              {
-                publicKey: publicKey
-              }
-            );
-            
-            console.log('✅ EmailJS response:', {
-              status: emailResponse.status,
-              text: emailResponse.text
+            log('INFO', 'Attempting to send email via EmailJS', {
+              serviceId: serviceId,
+              templateId: templateId
             });
             
-            return emailResponse;
+            try {
+              const emailResponse = await emailjs.send(
+                serviceId, 
+                templateId, 
+                emailTemplateParams,
+                {
+                  publicKey: publicKey
+                }
+              );
+              
+              log('INFO', 'EmailJS response received', {
+                status: emailResponse.status,
+                text: emailResponse.text
+              });
+              
+              return emailResponse;
+            } catch (emailError) {
+              log('ERROR', 'EmailJS send failed', {
+                error: emailError.message,
+                status: emailError.status,
+                text: emailError.text
+              });
+              throw emailError;
+            }
           })()
         : Promise.resolve({ 
             status: 'skipped', 
-            reason: 'EmailJS configuration incomplete',
-            missing: {
-              serviceId: !serviceId,
-              templateId: !templateId,
-              publicKey: !publicKey
-            }
+            reason: 'EmailJS configuration incomplete'
           })
     ]);
     
@@ -102,17 +128,18 @@ const submitContactForm = async (req, res) => {
     const dbSuccess = dbResult.status === 'fulfilled';
     const emailSuccess = emailResult.status === 'fulfilled';
     
-    console.log('=== Operation Results ===');
-    console.log('Database result:', dbSuccess ? '✅ Success' : '❌ Failed');
-    console.log('Email result:', emailSuccess ? '✅ Success' : '❌ Failed');
+    log('INFO', 'Operation Results', {
+      databaseSuccess: dbSuccess,
+      emailSuccess: emailSuccess,
+      emailSkipped: emailResult.value?.status === 'skipped'
+    });
     
     let insertedRecord = null;
     
     if (dbSuccess) {
       insertedRecord = dbResult.value.recordset[0];
       
-      // Log successful database submission
-      console.log('✅ Contact message saved to database:', {
+      log('INFO', 'Contact message saved to database', {
         id: insertedRecord.ID,
         name: name.substring(0, 3) + '***',
         email: email.substring(0, 3) + '***',
@@ -121,50 +148,81 @@ const submitContactForm = async (req, res) => {
         ip: req.ip
       });
     } else {
-      console.error('❌ Database error:', dbResult.reason);
+      log('ERROR', 'Database operation failed', {
+        error: dbResult.reason?.message || dbResult.reason
+      });
     }
     
     if (emailSuccess && emailResult.value.status !== 'skipped') {
-      console.log('✅ Email sent successfully via EmailJS');
-      console.log('Email details:', {
+      log('INFO', 'Email sent successfully via EmailJS', {
         status: emailResult.value.status,
         text: emailResult.value.text
       });
     } else if (emailResult.value?.status === 'skipped') {
-      console.log('⏭️  Email sending skipped:', emailResult.value.reason);
-      if (emailResult.value.missing) {
-        console.log('Missing config:', emailResult.value.missing);
-      }
+      log('INFO', 'Email sending skipped - configuration incomplete');
     } else {
-      console.error('❌ EmailJS error:', emailResult.reason);
-      console.error('Full email error:', emailResult.reason?.message || emailResult.reason);
+      log('ERROR', 'EmailJS operation failed', {
+        error: emailResult.reason?.message || emailResult.reason,
+        status: emailResult.reason?.status,
+        text: emailResult.reason?.text
+      });
     }
     
     // Determine response based on results
     if (dbSuccess) {
-      res.status(201).json({
+      const responseData = {
         success: true,
         message: 'Contact message sent successfully',
         id: insertedRecord.ID,
         timestamp: insertedRecord.CreatedAt,
         emailSent: emailSuccess && emailResult.value.status !== 'skipped',
-        emailConfigured: hasEmailConfig
-      });
+        emailConfigured: hasEmailConfig,
+        // Temporary debug info - remove in production
+        debug: {
+          environmentVariables: {
+            serviceId: serviceId ? `${serviceId.substring(0,8)}...` : 'missing',
+            templateId: templateId ? `${templateId.substring(0,8)}...` : 'missing',
+            publicKey: publicKey ? `${publicKey.substring(0,8)}...` : 'missing',
+            hasServiceId: !!serviceId,
+            hasTemplateId: !!templateId,
+            hasPublicKey: !!publicKey,
+            emailConfigured: hasEmailConfig
+          },
+          emailResult: emailResult.status === 'fulfilled' ? {
+            status: emailResult.value.status,
+            text: emailResult.value.text,
+            wasSkipped: emailResult.value.status === 'skipped'
+          } : {
+            rejected: true,
+            error: emailResult.reason?.message || 'Unknown error',
+            fullError: emailResult.reason
+          }
+        }
+      };
+      
+      log('INFO', 'Sending success response', responseData);
+      res.status(201).json(responseData);
     } else {
       // Database failed
       throw dbResult.reason;
     }
     
   } catch (error) {
-    console.error('=== Contact Submission Error ===');
-    console.error('Error message:', error.message);
-    console.error('Error code:', error.code);
-    console.error('Error name:', error.name);
-    console.error('Full error:', error);
-    console.error('Request details:', {
-      email: email ? email.substring(0, 3) + '***' : 'unknown',
-      ip: req.ip,
-      userAgent: req.get('User-Agent')
+    const log = (level, message, data = {}) => {
+      const timestamp = new Date().toISOString();
+      console.log(`[${timestamp}] [${level}] ${message}`, data);
+    };
+    
+    log('ERROR', 'Contact Submission Error', {
+      message: error.message,
+      code: error.code,
+      name: error.name,
+      stack: error.stack,
+      requestDetails: {
+        email: email ? email.substring(0, 3) + '***' : 'unknown',
+        ip: req.ip,
+        userAgent: req.get('User-Agent')
+      }
     });
     
     // Handle specific database errors
