@@ -7,9 +7,9 @@ const submitContactForm = async (req, res) => {
   
   try {
     // EmailJS configuration from environment variables
-    const serviceId = process.env.serviceId;
-    const templateId = process.env.templateId;
-    const publicKey = process.env.publicKey;
+    const serviceId = process.env.REACT_APP_EMAILJS_SERVICE_ID;
+    const templateId = process.env.REACT_APP_EMAILJS_TEMPLATE_ID;
+    const publicKey = process.env.REACT_APP_EMAILJS_PUBLIC_KEY;
     
     // Log EmailJS configuration (without exposing sensitive data)
     console.log('EmailJS Config:', {
